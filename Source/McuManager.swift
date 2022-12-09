@@ -228,16 +228,8 @@ open class McuManager {
         // BLE MTU is determined by the version of iOS running on the device
         if scheme.isBle() {
             /// Return the maximum BLE ATT MTU for this iOS device.
-            if #available(iOS 11.0, *) {
-                // For iOS 11.0+ (527 - 3)
-                return 524
-            } else if #available(iOS 10.0, *) {
-                // For iOS 10.0 (185 - 3)
-                return 182
-            } else {
-                // For iOS 9.0 (158 - 3)
-                return 155
-            }
+			// For iOS 11.0+ (527 - 3)
+			return 524
         } else {
             return 1024
         }

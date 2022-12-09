@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "iOSMcuManagerLibrary",
-    platforms: [.iOS(.v9), .macOS(.v10_13)],
+    platforms: [.iOS(.v11)],
     products: [
         .library(
             name: "iOSMcuManagerLibrary",
