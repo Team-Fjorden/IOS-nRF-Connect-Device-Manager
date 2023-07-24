@@ -14,7 +14,6 @@ public class ImageManager: McuManager {
     override class var TAG: McuMgrLogCategory { .image }
     
     private static let PIPELINED_WRITES_TIMEOUT_SECONDS = 10
-    private static let truncatedHashLen = 3
     
     // MARK: - IDs
 
@@ -63,6 +62,7 @@ public class ImageManager: McuManager {
         let chunkEnd = min(chunkOffset + payloadLength, UInt64(data.count))
         var payload: [String:CBOR] = ["data": CBOR.byteString([UInt8](data[chunkOffset..<chunkEnd])),
                                       "off": CBOR.unsignedInt(chunkOffset)]
+        let uploadTimeoutInSeconds: Int
         if chunkOffset == 0 {
             // 0 is Default behaviour, so we can ignore adding it and
             // the firmware will do the right thing.
@@ -71,10 +71,14 @@ public class ImageManager: McuManager {
             }
             
             payload.updateValue(CBOR.unsignedInt(UInt64(data.count)), forKey: "len")
-            payload.updateValue(CBOR.byteString([UInt8](data.sha256()[0..<ImageManager.truncatedHashLen])), forKey: "sha")
+            payload.updateValue(CBOR.byteString([UInt8](data.sha256())), forKey: "sha")
+            
+            // When uploading offset 0, we might trigger an erase on the firmware's end.
+            // Hence, the longer timeout.
+            uploadTimeoutInSeconds = McuManager.DEFAULT_SEND_TIMEOUT_SECONDS
+        } else {
+            uploadTimeoutInSeconds = McuManager.FAST_TIMEOUT
         }
-        
-        let uploadTimeoutInSeconds = 1
         send(op: .write, commandId: ImageID.Upload, payload: payload, timeout: uploadTimeoutInSeconds,
              callback: callback)
         uploadExpectedOffsets.append(chunkEnd)
@@ -352,6 +356,14 @@ public class ImageManager: McuManager {
             self.cancelUpload(error: error)
             return
         }
+        
+        // If response includes 'match' value, it should be true.
+        // Else, we assume everything is OK.
+        guard response?.match ?? true else {
+            self.cancelUpload(error: ImageUploadError.offsetMismatch)
+            return
+        }
+        
         // Make sure the image data is set.
         guard let currentImageData = self.imageData, let images = self.uploadImages else {
             self.cancelUpload(error: ImageUploadError.invalidData)
@@ -513,7 +525,7 @@ public class ImageManager: McuManager {
             }
             
             payload.updateValue(CBOR.unsignedInt(UInt64(data.count)), forKey: "len")
-            payload.updateValue(CBOR.byteString([UInt8](repeating: 0, count: ImageManager.truncatedHashLen)), forKey: "sha")
+            payload.updateValue(CBOR.byteString([UInt8](data.sha256())), forKey: "sha")
         }
         // Build the packet and return the size.
         let packet = McuManager.buildPacket(scheme: transporter.getScheme(), op: .write, flags: 0,
@@ -551,6 +563,8 @@ public enum ImageUploadError: Error {
     case invalidPayload
     /// Image Data is nil.
     case invalidData
+    /// Response payload reports package offset does not match expected value.
+    case offsetMismatch
     
     case invalidUploadSequenceNumber(McuSequenceNumber)
     /// McuMgrResponse contains a error return code.
@@ -565,6 +579,8 @@ extension ImageUploadError: LocalizedError {
             return "Response payload values do not exist."
         case .invalidData:
             return "Image data is nil."
+        case .offsetMismatch:
+            return "Response payload reports package offset does not match expected value."
         case .invalidUploadSequenceNumber(let sequenceNumber):
             return "Received Response for Unknown Sequence Number \(sequenceNumber)."
         case .mcuMgrErrorCode(let code):

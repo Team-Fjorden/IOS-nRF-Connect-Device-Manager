@@ -32,7 +32,10 @@ open class McuManager {
     /// If a specific Timeout is not set, the number of seconds that will be
     /// allowed to elapse before a send request is considered to have failed
     /// due to a timeout if no response is received.
-    public static let DEFAULT_SEND_TIMEOUT_SECONDS = 30
+    public static let DEFAULT_SEND_TIMEOUT_SECONDS = 40
+    /// This is the default time to wait for a command to be sent, executed
+    /// and received (responded to) by the firmware on the other end.
+    public static let FAST_TIMEOUT = 5
     
     //**************************************************************************
     // MARK: Properties
@@ -92,9 +95,9 @@ open class McuManager {
             atLevel: .verbose)
         let packetSequenceNumber = nextSequenceNumber
         let packetData = McuManager.buildPacket(scheme: transporter.getScheme(), op: op,
-                                                   flags: flags, group: group.uInt16Value,
-                                                   sequenceNumber: packetSequenceNumber,
-                                                   commandId: commandId, payload: payload)
+                                                flags: flags, group: group.uInt16Value,
+                                                sequenceNumber: packetSequenceNumber,
+                                                commandId: commandId, payload: payload)
         let _callback: McuMgrCallback<T> = { [weak self] (response, error) -> Void in
             guard let self = self else {
                 callback(response, error)
@@ -205,7 +208,7 @@ open class McuManager {
         return RFC3339DateFormatter.string(from: date)
     }
     
-    static let ValidMTURange = 23...1024
+    static let ValidMTURange = 73...1024
     
     public func setMtu(_ mtu: Int) throws  {
         guard Self.ValidMTURange.contains(mtu) else {
