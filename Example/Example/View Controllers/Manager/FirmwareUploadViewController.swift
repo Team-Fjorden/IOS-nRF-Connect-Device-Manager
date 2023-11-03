@@ -39,7 +39,7 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
     }
     
     @IBAction func setNumberOfBuffers(_ sender: UIButton) {
-        let alertController = UIAlertController(title: "Number of Buffers", message: nil, preferredStyle: .actionSheet)
+        let alertController = UIAlertController(title: "Number of buffers", message: nil, preferredStyle: .actionSheet)
         let values = [2, 3, 4, 5, 6]
         values.forEach { value in
             let title = value == values.first ? "Disabled" : "\(value)"
@@ -54,11 +54,12 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
     }
     
     @IBAction func setDfuAlignment(_ sender: UIButton) {
-        let alertController = UIAlertController(title: "Byte Alignment", message: nil, preferredStyle: .actionSheet)
+        let alertController = UIAlertController(title: "Byte alignment", message: nil, preferredStyle: .actionSheet)
         ImageUploadAlignment.allCases.forEach { alignmentValue in
-            alertController.addAction(UIAlertAction(title: alignmentValue.description, style: .default) {
+            let text = "\(alertController)"
+            alertController.addAction(UIAlertAction(title: text, style: .default) {
                 action in
-                self.dfuByteAlignment.text = alignmentValue.description
+                self.dfuByteAlignment.text = text
                 self.uploadConfiguration.byteAlignment = alignmentValue
             })
         }
@@ -66,7 +67,7 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
     }
     
     @IBAction func setChunkSize(_ sender: Any) {
-        let alertController = UIAlertController(title: "Set Chunk Size", message: "0 means Default (MTU Size)", preferredStyle: .alert)
+        let alertController = UIAlertController(title: "Set chunk size", message: "0 means default (MTU size)", preferredStyle: .alert)
         alertController.addTextField { (textField) in
             textField.placeholder = "\(self.uploadConfiguration.reassemblyBufferSize)"
             textField.keyboardType = .decimalPad
@@ -100,17 +101,10 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
         guard let package = package else { return }
         uploadImageSize = nil
         
-        let images: [ImageManager.Image]
-        if package.images.count > 1 {
-            images = package.images.map { ImageManager.Image(image: $0.image, data: $0.data) }
-        } else {
-            images = Self.uploadImages.map { ImageManager.Image(image: $0, data: package.images[0].data) }
-        }
-        
-        let alertController = UIAlertController(title: "Select Core Slot", message: nil, preferredStyle: .actionSheet)
+        let alertController = UIAlertController(title: "Select", message: nil, preferredStyle: .actionSheet)
         let configuration = uploadConfiguration
-        for image in images {
-            alertController.addAction(UIAlertAction(title: McuMgrPackage.imageName(at: image.image), style: .default) { [weak self]
+        for (i, image) in package.images.enumerated() {
+            alertController.addAction(UIAlertAction(title: package.imageName(at: i), style: .default) { [weak self]
                 action in
                 self?.actionBuffers.isEnabled = false
                 self?.actionAlignment.isEnabled = false
@@ -119,10 +113,10 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
                 self?.actionPause.isHidden = false
                 self?.actionCancel.isHidden = false
                 self?.actionSelect.isEnabled = false
-                self?.imageSlot = image.image
+                self?.packageImageIndex = i
                 self?.status.textColor = .primary
-                self?.status.text = "UPLOADING \(McuMgrPackage.imageName(at: image.image))..."
-                _ = self?.imageManager.upload(images: [ImageManager.Image(image: image.image, data: image.data)],
+                self?.status.text = "UPLOADING \(package.imageName(at: i))..."
+                _ = self?.imageManager.upload(images: [image],
                                               using: configuration, delegate: self)
             })
         }
@@ -147,9 +141,9 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
     }
     
     @IBAction func resume(_ sender: UIButton) {
-        status.textColor = .primary
-        if let image = self.imageSlot {
-            status.text = "UPLOADING IMAGE \(McuMgrPackage.imageName(at: image))..."
+        status.textColor = .secondary
+        if let package, let i = packageImageIndex {
+            status.text = "UPLOADING IMAGE \(package.imageName(at: i))..."
         } else {
             status.text = "UPLOADING..."
         }
@@ -163,8 +157,8 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
         imageManager.cancelUpload()
     }
     
-    private var imageSlot: Int?
     private var package: McuMgrPackage?
+    private var packageImageIndex: Int?
     private var imageManager: ImageManager!
     var transporter: McuMgrTransport! {
         didSet {
@@ -176,6 +170,11 @@ class FirmwareUploadViewController: UIViewController, McuMgrViewController {
     private var uploadConfiguration = FirmwareUpgradeConfiguration(estimatedSwapTime: 10.0, pipelineDepth: 1, byteAlignment: .disabled)
     private var uploadImageSize: Int!
     private var uploadTimestamp: Date!
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.translatesAutoresizingMaskIntoConstraints = false
+    }
 }
 
 // MARK: - ImageUploadDelegate
@@ -220,7 +219,7 @@ extension FirmwareUploadViewController: ImageUploadDelegate {
         actionStart.isHidden = false
         actionSelect.isEnabled = true
         status.textColor = .systemRed
-        status.text = "\(error.localizedDescription)"
+        status.text = error.localizedDescription
     }
     
     func uploadDidCancel() {
@@ -233,7 +232,7 @@ extension FirmwareUploadViewController: ImageUploadDelegate {
         actionCancel.isHidden = true
         actionStart.isHidden = false
         actionSelect.isEnabled = true
-        status.textColor = .primary
+        status.textColor = .secondary
         status.text = "CANCELLED"
     }
     
@@ -248,7 +247,7 @@ extension FirmwareUploadViewController: ImageUploadDelegate {
         actionStart.isHidden = false
         actionStart.isEnabled = false
         actionSelect.isEnabled = true
-        status.textColor = .primary
+        status.textColor = .secondary
         status.text = "UPLOAD COMPLETE"
         package = nil
     }
@@ -274,7 +273,7 @@ extension FirmwareUploadViewController: UIDocumentMenuDelegate, UIDocumentPicker
             fileHash.numberOfLines = 0
             
             dfuNumberOfBuffers.text = uploadConfiguration.pipelineDepth == 1 ? "Disabled" : "\(uploadConfiguration.pipelineDepth + 1)"
-            dfuByteAlignment.text = uploadConfiguration.byteAlignment.description
+            dfuByteAlignment.text = "\(uploadConfiguration.byteAlignment)"
             dfuChunkSize.text = "\(uploadConfiguration.reassemblyBufferSize)"
             
             status.textColor = .primary
@@ -285,8 +284,9 @@ extension FirmwareUploadViewController: UIDocumentMenuDelegate, UIDocumentPicker
             fileSize.text = ""
             fileHash.text = ""
             status.textColor = .systemRed
-            status.text = "INVALID FILE"
+            status.text = "Invalid file"
             actionStart.isEnabled = false
         }
+        (parent as! ImageController).innerViewReloaded()
     }
 }
